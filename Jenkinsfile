@@ -1,6 +1,9 @@
 pipeline {
 
-    agent any
+     agent {
+        label "${params.BUILD_LOCATION == 'master' ? 'built-in || master' : 'build-agent'}"
+    }
+
 
     environment {
         BUILD_SCRIPT        = "scripts/build_open5gs.sh"
@@ -19,7 +22,7 @@ pipeline {
     parameters {
         choice(
             name: 'BUILD_LOCATION',
-            choices: ['master', 'agent'],
+            choices: ['master', 'master'],
             description: 'Select where to run the build'
         )
     }

@@ -13,6 +13,7 @@ pipeline {
 
     options {
         timestamps()
+        skipDefaultCheckout()
     }
 
     parameters {

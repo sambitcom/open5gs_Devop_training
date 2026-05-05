@@ -14,22 +14,30 @@ echo "🚀 Starting Open5GS build..."
 # -------------------------------
 
 echo "📦 Installing dependencies..."
-sudo apt-get update
+PACKAGES="python3-pip python3-setuptools python3-wheel \
+ninja-build build-essential flex bison git cmake \
+libsctp-dev libgnutls28-dev libgcrypt-dev libssl-dev \
+libmongoc-dev libbson-dev libyaml-dev libnghttp2-dev \
+libmicrohttpd-dev libcurl4-gnutls-dev libtins-dev \
+libtalloc-dev meson pkg-config"
 
-sudo apt-get install -y 
-python3-pip python3-setuptools python3-wheel 
-ninja-build build-essential flex bison git cmake 
-libsctp-dev libgnutls28-dev libgcrypt-dev libssl-dev 
-libmongoc-dev libbson-dev libyaml-dev libnghttp2-dev 
-libmicrohttpd-dev libcurl4-gnutls-dev libtins-dev 
-libtalloc-dev meson pkg-config
+MISSING=""
+for pkg in $PACKAGES; do
+    dpkg -s "$pkg" > /dev/null 2>&1 || MISSING="$MISSING $pkg"
+done
+
+if [ -n "$MISSING" ]; then
+    sudo apt-get update -qq
+    sudo apt-get install -y $MISSING
+fi
 
 # Install libidn conditionally
-
-if apt-cache show libidn-dev > /dev/null 2>&1; then
-sudo apt-get install -y --no-install-recommends libidn-dev
-else
-sudo apt-get install -y --no-install-recommends libidn11-dev
+if ! dpkg -s libidn-dev > /dev/null 2>&1 && ! dpkg -s libidn11-dev > /dev/null 2>&1; then
+    if apt-cache show libidn-dev > /dev/null 2>&1; then
+        sudo apt-get install -y --no-install-recommends libidn-dev
+    else
+        sudo apt-get install -y --no-install-recommends libidn11-dev
+    fi
 fi
 
 # -------------------------------

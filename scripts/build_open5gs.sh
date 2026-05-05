@@ -7,19 +7,22 @@ INSTALL_DIR="$ROOT_DIR/install"
 
 echo "🚀 Starting Open5GS build..."
 
-# -------------------------------
+# -------------------------------------------------------
+# Dependency check — packages must be pre-installed on
+# the build machine. No sudo is used here.
+# To pre-install: sudo apt-get install -y <packages>
+# -------------------------------------------------------
 
-# Install dependencies
+echo "📦 Checking dependencies..."
 
-# -------------------------------
-
-echo "📦 Installing dependencies..."
-PACKAGES="python3-pip python3-setuptools python3-wheel \
-ninja-build build-essential flex bison git cmake \
-libsctp-dev libgnutls28-dev libgcrypt-dev libssl-dev \
-libmongoc-dev libbson-dev libyaml-dev libnghttp2-dev \
-libmicrohttpd-dev libcurl4-gnutls-dev libtins-dev \
-libtalloc-dev meson pkg-config"
+PACKAGES="
+    python3-pip python3-setuptools python3-wheel
+    ninja-build build-essential flex bison git cmake
+    libsctp-dev libgnutls28-dev libgcrypt-dev libssl-dev
+    libmongoc-dev libbson-dev libyaml-dev libnghttp2-dev
+    libmicrohttpd-dev libcurl4-gnutls-dev libtins-dev
+    libtalloc-dev meson pkg-config
+"
 
 MISSING=""
 for pkg in $PACKAGES; do
@@ -27,77 +30,61 @@ for pkg in $PACKAGES; do
 done
 
 if [ -n "$MISSING" ]; then
-    sudo apt-get update -qq
-    sudo apt-get install -y $MISSING
+    echo "❌ Missing required packages. Pre-install them on the build machine:"
+    echo "   sudo apt-get install -y$MISSING"
+    exit 1
 fi
 
-# Install libidn conditionally
 if ! dpkg -s libidn-dev > /dev/null 2>&1 && ! dpkg -s libidn11-dev > /dev/null 2>&1; then
-    if apt-cache show libidn-dev > /dev/null 2>&1; then
-        sudo apt-get install -y --no-install-recommends libidn-dev
-    else
-        sudo apt-get install -y --no-install-recommends libidn11-dev
-    fi
+    echo "❌ Missing required package: libidn-dev or libidn11-dev"
+    echo "   sudo apt-get install -y libidn-dev"
+    exit 1
 fi
 
-# -------------------------------
+echo "✅ All dependencies satisfied"
 
-# Clone repo (if not exists)
-
-# -------------------------------
+# -------------------------------------------------------
+# Clone Open5GS source (if not already present)
+# -------------------------------------------------------
 
 if [ ! -d "$ROOT_DIR/open5gs" ]; then
-echo "📥 Cloning Open5GS..."
-git clone https://github.com/open5gs/open5gs "$ROOT_DIR/open5gs"
+    echo "📥 Cloning Open5GS..."
+    git clone https://github.com/open5gs/open5gs "$ROOT_DIR/open5gs"
 fi
 
 cd "$ROOT_DIR/open5gs"
 
-# -------------------------------
+# -------------------------------------------------------
+# Configure
+# -------------------------------------------------------
 
-# Configure build
-
-# -------------------------------
-
-echo "⚙️ Configuring with Meson..."
+echo "⚙️  Configuring with Meson..."
 meson setup "$BUILD_DIR" --prefix="$INSTALL_DIR" || true
 
-# -------------------------------
-
+# -------------------------------------------------------
 # Build
-
-# -------------------------------
+# -------------------------------------------------------
 
 echo "🔨 Building with Ninja..."
 ninja -C "$BUILD_DIR"
 
-# -------------------------------
-
-# Run Tests
-
-# -------------------------------
+# -------------------------------------------------------
+# Test
+# -------------------------------------------------------
 
 echo "🧪 Running tests..."
-
-# Basic functional tests
-
-./build/tests/attach/attach || true
-./build/tests/registration/registration || true
-
-# Full test suite
+"$ROOT_DIR/open5gs/build/tests/attach/attach"       || true
+"$ROOT_DIR/open5gs/build/tests/registration/registration" || true
 
 cd "$BUILD_DIR"
 meson test -v || true
 cd -
 
-# -------------------------------
-
+# -------------------------------------------------------
 # Install
-
-# -------------------------------
+# -------------------------------------------------------
 
 echo "📦 Installing..."
 ninja -C "$BUILD_DIR" install
 
 echo "✅ Build completed successfully!"
-

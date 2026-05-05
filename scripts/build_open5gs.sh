@@ -29,16 +29,14 @@ for pkg in $PACKAGES; do
     dpkg -s "$pkg" > /dev/null 2>&1 || MISSING="$MISSING $pkg"
 done
 
-if [ -n "$MISSING" ]; then
-    echo "❌ Missing required packages. Pre-install them on the build machine:"
-    echo "   sudo apt-get install -y$MISSING"
-    exit 1
+if ! dpkg -s libidn-dev > /dev/null 2>&1 && ! dpkg -s libidn11-dev > /dev/null 2>&1; then
+    MISSING="$MISSING libidn-dev"
 fi
 
-if ! dpkg -s libidn-dev > /dev/null 2>&1 && ! dpkg -s libidn11-dev > /dev/null 2>&1; then
-    echo "❌ Missing required package: libidn-dev or libidn11-dev"
-    echo "   sudo apt-get install -y libidn-dev"
-    exit 1
+if [ -n "$MISSING" ]; then
+    echo "⚙️  Installing missing packages:$MISSING"
+    sudo apt-get update -qq
+    sudo apt-get install -y $MISSING
 fi
 
 echo "✅ All dependencies satisfied"

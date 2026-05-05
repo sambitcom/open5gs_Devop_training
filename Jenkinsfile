@@ -1,8 +1,6 @@
 pipeline {
 
-    agent {
-        label "${params.BUILD_LOCATION == 'master' ? 'built-in || master' : 'build-agent'}"
-    }
+    agent any
 
     environment {
         BUILD_SCRIPT        = "scripts/build_open5gs.sh"

@@ -99,12 +99,6 @@ pipeline {
             }
         }
 
-        stage('Archive Artifact') {
-            steps {
-                sh "tar -czf ${ARTIFACT_NAME} --exclude=${ARTIFACT_NAME} ."
-                archiveArtifacts artifacts: "${ARTIFACT_NAME}", fingerprint: true
-            }
-        }
     }
 
     post {

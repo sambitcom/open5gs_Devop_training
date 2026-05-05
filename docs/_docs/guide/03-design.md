@@ -12,6 +12,49 @@ Open5GS is a C-language implementation of EPC and 5G Core network functions. In 
 
 Open5GS sits between radio access networks, subscriber data, policy/session control, and packet data networks.
 
+### Overall System Diagram
+
+```text
+                                      +----------------------+
+                                      |   Operator / Admin   |
+                                      +----------+-----------+
+                                                 |
+                                                 | HTTPS / HTTP :9999
+                                                 v
+                                      +----------------------+
+                                      |      Open5GS Web UI  |
+                                      | Express + Next.js    |
+                                      +----------+-----------+
+                                                 |
+                                                 | MongoDB driver
+                                                 v
+        +------------------+          +----------------------+          +------------------+
+        |       UE         |          |       MongoDB        |          | External Data    |
+        | SIM / USIM       |          | subscribers, profiles|          | Network / IMS    |
+        +--------+---------+          | accounts, sessions   |          | Internet / APN   |
+                 |                    +----------+-----------+          +---------+--------+
+                 | Radio                         ^                                ^
+                 v                               |                                |
+        +------------------+                     |                                |
+        | eNB / gNB / RAN  |                     |                                |
+        +--------+---------+                     |                                |
+                 |                               |                                |
+                 | S1AP or NGAP over SCTP        | DBI                            | IP packets
+                 v                               |                                |
+        +------------------+          +----------+-----------+          +---------+--------+
+        | Access Control   |          | Subscriber / Policy  |          | User Plane       |
+        | MME or AMF       +----------> HSS, UDR, UDM, AUSF, |          | SGW-U / UPF      |
+        +--------+---------+          | PCF, PCRF, NSSF      |          +---------+--------+
+                 |                    +----------+-----------+                    ^
+                 | Control plane                 ^                                |
+                 | GTP-C, PFCP, SBI, Diameter    | SBI / Diameter                 | GTP-U / PFCP
+                 v                               |                                |
+        +------------------+                     |                                |
+        | Session Control  +---------------------+--------------------------------+
+        | SGW-C / SMF      |
+        +------------------+
+```
+
 At a high level:
 
 * UE devices attach through an eNB for LTE/EPC or a gNB for 5G SA.
@@ -96,6 +139,39 @@ For 5G SA, functions can discover each other through NRF directly or through SCP
 
 ### 5G SA
 
+```text
+                         5G SA Control Plane and User Plane
+
+      +-----+        Radio        +-----+       NGAP/SCTP       +-----+
+      | UE  +-------------------->+ gNB +---------------------->+ AMF |
+      +-----+                     +-----+                       +-+-+-+
+                                                                  | |
+                                                                  | | SBI
+                                                                  | v
+                 +---------+     SBI      +-----+      SBI      +-+-+--+
+                 | AUSF    +<------------>+ NRF +<------------->+ SCP  |
+                 +----+----+              +--+--+               +--+---+
+                      |                      ^                     ^
+                      | SBI                  | SBI discovery        | SBI routing
+                      v                      |                     |
+                 +----+----+     SBI      +--+--+      SBI      +--+---+
+                 | UDM     +<------------>+ UDR +<------------->+ PCF  |
+                 +---------+              +-----+               +------+
+
+                                      SBI
+                    +---------------------------------------------+
+                    |                                             v
+                  +-+-+             PFCP                   +------+------+
+                  |SMF+------------------------------------>+    UPF      |
+                  +-+-+                                     +------+------+
+                    ^                                              |
+                    | N1/N2 session control                         | GTP-U / TUN
+                    +-----------------------------------------------v
+                                                            +--------------+
+                                                            | Data Network |
+                                                            +--------------+
+```
+
 1. gNB connects to AMF over NGAP/SCTP.
 2. AMF handles NAS registration and mobility management.
 3. AMF uses SBI to reach AUSF, UDM, UDR, PCF, NSSF, NRF, SCP, and SMF as needed.
@@ -104,6 +180,38 @@ For 5G SA, functions can discover each other through NRF directly or through SCP
 6. UPF forwards UE traffic over GTP-U and local TUN interfaces.
 
 ### LTE/EPC
+
+```text
+                         LTE/EPC Control Plane and User Plane
+
+      +-----+        Radio        +-----+       S1AP/SCTP       +-----+
+      | UE  +-------------------->+ eNB +---------------------->+ MME |
+      +-----+                     +-+---+                       +-+-+-+
+                                    |                             | |
+                                    |                             | | Diameter S6a
+                                    | S1-U / GTP-U                | v
+                                    |                           +-+-+--+
+                                    |                           | HSS  |
+                                    |                           +------+
+                                    |
+                                    v
+                               +----+-----+        GTP-C        +-------+
+                               |  SGW-U   |<------------------->+ SGW-C |
+                               +----+-----+                     +---+---+
+                                    |                               |
+                                    | GTP-U                         | GTP-C
+                                    v                               v
+                               +----+-----+        PFCP/GTP-C   +---+---+
+                               | UPF/PGW-U|<------------------->+ SMF/  |
+                               +----+-----+                     | PGW-C |
+                                    |                           +---+---+
+                                    |                               |
+                                    v                               | Diameter Gx/Rx
+                              +-----+------+                        v
+                              | Data/IMS   |                    +---+---+
+                              | Network    |                    | PCRF  |
+                              +------------+                    +-------+
+```
 
 1. eNB connects to MME over S1AP/SCTP.
 2. MME handles attach, authentication, mobility, paging, and bearer control.
@@ -115,6 +223,33 @@ For 5G SA, functions can discover each other through NRF directly or through SCP
 ## 8. Web UI Design
 
 The `webui/` application is a separate Node.js service that defaults to port `9999`.
+
+```text
+                         Web UI and Subscriber Data Path
+
+       +------------------+       HTTP :9999       +-----------------------+
+       | Browser / Admin  +----------------------->+ Express Server        |
+       +------------------+                        | webui/server/index.js |
+                                                   +-----------+-----------+
+                                                               |
+                              +--------------------------------+----------------+
+                              |                                                 |
+                              v                                                 v
+                     +------------------+                              +------------------+
+                     | Next.js / React  |                              | /api routes      |
+                     | pages + UI       |                              | auth + db        |
+                     +------------------+                              +--------+---------+
+                                                                                |
+                                                                                | Mongoose
+                                                                                v
+                                                                       +--------+---------+
+                                                                       | MongoDB          |
+                                                                       | Subscriber       |
+                                                                       | Profile          |
+                                                                       | Account          |
+                                                                       | Session store    |
+                                                                       +------------------+
+```
 
 Server-side responsibilities:
 
@@ -135,6 +270,35 @@ MongoDB is therefore both a subscriber data store for Open5GS and the backing st
 ## 9. Build, Packaging, and Deployment
 
 The native build uses Meson from the top-level `meson.build`. The build includes:
+
+```text
+                         Build and Deployment View
+
+      +---------------------+
+      | Source Repository   |
+      | src, lib, configs   |
+      +----------+----------+
+                 |
+                 | meson setup / compile / install
+                 v
+      +---------------------+       installs       +----------------------+
+      | Build Artifacts     +--------------------->+ Runtime Host/VM      |
+      | open5gs-* daemons   |                      | systemd services     |
+      +----------+----------+                      +----------+-----------+
+                 |                                            |
+                 | package                                    | reads
+                 v                                            v
+      +---------------------+                      +----------------------+
+      | Debian Packages     |                      | /etc/open5gs/*.yaml  |
+      | per NF install      |                      | /etc/freeDiameter    |
+      +---------------------+                      +----------------------+
+
+      +---------------------+      compose up      +----------------------+
+      | docker/             +--------------------->+ MongoDB + Web UI     |
+      | Dockerfiles         |                      | build/run/test/dev   |
+      | docker-compose.yml  |                      | containers           |
+      +---------------------+                      +----------------------+
+```
 
 * `configs`: installable runtime configuration.
 * `lib`: shared protocol/runtime libraries.
